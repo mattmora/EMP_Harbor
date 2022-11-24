@@ -22,8 +22,6 @@
 	},
 	"type": "module",
 	"dependencies": {
-		"image-pixels": "^2.2.2",
-		"marinetraffic": "^0.0.3",
-		"ns-joycon": "file:ns-joycon"
+		"points-on-curve": "^1.0.0"
 	}
 }

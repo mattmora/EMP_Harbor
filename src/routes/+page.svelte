@@ -1,9 +1,11 @@
 <script>
 	import { onMount } from 'svelte';
-	// import * as JoyCon from 'ns-joycon';
+	import { pointsOnBezierCurves } from 'points-on-curve';
+	import { curveToBezier } from 'points-on-curve/lib/curve-to-bezier.js';
 
 	const maps = [];
 	const views = [];
+	const ships = [];
 
 	let hiResCanvas;
 	let hiResContext;
@@ -14,11 +16,11 @@
 
 	const input = {};
 	const zoomRate = 0.2;
-	const moveSpeed = 50;
+	const moveSpeed = 200;
 
 	const update = (delta) => {
-		views.forEach((player) => {
-			let { x, y, zoom } = player;
+		views.forEach((view) => {
+			let { x, y, zoom } = view;
 
 			const forward = input.e ?? 0;
 			const back = input.q ?? 0;
@@ -34,12 +36,14 @@
 			const v = up - down;
 			const mag = Math.sqrt(h * h + v * v);
 			const n = mag > 0 ? 1 / mag : 0;
-			x += n * h * moveSpeed * (1 / zoom) * delta;
-			y -= n * v * moveSpeed * (1 / zoom) * delta;
+			x += n * h * moveSpeed * delta; //* (1 / zoom) ;
+			y -= n * v * moveSpeed * delta; //* (1 / zoom) ;
 
-			player.x = x;
-			player.y = y;
-			player.zoom = zoom;
+			view.x = x;
+			view.y = y;
+			view.zoom = zoom;
+
+			hueRotate += delta;
 		});
 	};
 
@@ -50,27 +54,17 @@
 			const width = (map.canvas.width = canvas.width = canvas.offsetWidth);
 			const height = (map.canvas.height = canvas.height = canvas.offsetHeight);
 
-			context.drawImage(animationCanvas, x, y, width / zoom, height / zoom, 0, 0, width, height);
-
 			const useHiRes = zoom > 0.8;
-			const scalar = useHiRes ? hiResRatio : 1;
 			const sourceCanvas = useHiRes ? hiResCanvas : backgroundCanvas;
-			const sx = x * scalar;
-			const sy = y * scalar;
-			const sw = (width * scalar) / zoom;
-			const sh = (height * scalar) / zoom;
+			const s = useHiRes ? hiResRatio : 1;
+			const w = width / zoom;
+			const h = height / zoom;
 
-			map.context.drawImage(
-				sourceCanvas,
-				sx - sw * 0.5,
-				sy - sh * 0.5,
-				sw,
-				sh,
-				0,
-				0,
-				width,
-				height
-			);
+			const left = x - w * 0.5;
+			const top = y - h * 0.5;
+
+			context.drawImage(animationCanvas, left, top, w, h, 0, 0, width, height);
+			map.context.drawImage(sourceCanvas, left * s, top * s, w * s, h * s, 0, 0, width, height);
 		});
 	};
 
@@ -94,13 +88,6 @@
 		input[e.key.toLowerCase()] = 0;
 	};
 
-	const hueRotate = 180;
-	const invert = 100;
-	const saturation = 1;
-
-	$: mapStyle = `
-    filter: hue-rotate(${hueRotate}deg) invert(${invert}%) saturate(${saturation});`;
-
 	const viewCount = 4;
 	const div = Math.ceil(Math.sqrt(viewCount));
 
@@ -110,6 +97,24 @@
 	$: gridStyle = `
 	grid-template-columns: ${sizeString.repeat(div)};
 	grid-template-rows: ${sizeString.repeat(div)};`;
+
+	let hueRotate = 180;
+	let invert = 100;
+	let saturation = 1;
+
+	const mapStyles = [];
+	for (let i = 0; i < viewCount; i++) {
+		mapStyles.push(
+			`filter: hue-rotate(${hueRotate}deg) invert(${invert}%) saturate(${saturation});`
+		);
+	}
+	$: {
+		for (let i = 0; i < viewCount; i++) {
+			mapStyles[
+				i
+			] = `filter: hue-rotate(${hueRotate}deg) invert(${invert}%) saturate(${saturation});`;
+		}
+	}
 
 	onMount(() => {
 		// Offscreen canvases
@@ -128,13 +133,20 @@
 			maps[i].canvas = document.getElementById(`map${i}`);
 			maps[i].context = maps[i].canvas.getContext('2d');
 
+			ships.push({
+				points: [],
+				path: [],
+				color: shipColors[i]
+			});
+
 			views.push({
 				x: 0,
 				y: 0,
 				zoom: 1,
-				map: maps[i]
+				map: maps[i],
+				ship: ships[i]
 			});
-			views[i].canvas = document.getElementById(`player${i}`);
+			views[i].canvas = document.getElementById(`view${i}`);
 			views[i].context = views[i].canvas.getContext('2d');
 
 			views.forEach(({ canvas, map }) => {
@@ -170,28 +182,55 @@
 		};
 
 		requestAnimationFrame(step);
-
-		// JoyCon.findControllers((devices) => {
-		// 	// When found any device.
-		// 	devices.forEach(async (device) => {
-		// 		console.log(`Found a device (${device.meta.serialNumber})`);
-		// 		// Add a handler for new device.
-		// 		device.manageHandler('add', (packet) => {
-		// 			console.log(device.meta.product, packet);
-		// 		});
-		// 		await device.enableIMU();
-		// 	});
-		// });a
 	});
+
+	const shipColors = ['#ff00d7', '#c9ff00', '#ff9900', '#0982ff'];
+
+	const updateShipPaths = () => {
+		const canvas = animationCanvas;
+		const context = animationContext;
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		ships.forEach(({ path, color }) => {
+			if (path.length > 0) {
+				context.beginPath();
+				context.lineWidth = 3;
+				context.strokeStyle = color;
+				context.setLineDash([10, 2]);
+				context.moveTo(path[0][0], path[0][1]);
+				for (let i = 1; i < path.length; i++) {
+					context.lineTo(path[i][0], path[i][1]);
+				}
+				context.stroke();
+			}
+		});
+	};
+
+	const addPointToCurve = (e, i) => {
+		const { x, y, zoom, canvas } = views[i];
+		const px = x + (e.offsetX - canvas.width * 0.5) / zoom;
+		const py = y + (e.offsetY - canvas.height * 0.5) / zoom;
+
+		console.log(`${e.offsetX} ${e.offsetY}`);
+		console.log(`${px} ${py}`);
+
+		const ship = ships[i];
+		ship.points.push([px, py]);
+		if (ship.points.length > 2) {
+			const bezier = curveToBezier(ship.points);
+			ship.path = pointsOnBezierCurves(bezier, 0.8);
+		}
+
+		updateShipPaths();
+	};
 </script>
 
 <svelte:window on:keydown|preventDefault={onKeyDown} on:keyup|preventDefault={onKeyUp} />
 
 <div class="views" style={gridStyle}>
 	{#each [...Array(viewCount).keys()] as _, i}
-		<div id="viewport{i}" class="viewport">
-			<canvas id="map{i}" class="map" style={mapStyle} />
-			<canvas id="player{i}" class="player" />
+		<div id="viewport{i}" class="viewport" on:mousedown={(e) => addPointToCurve(e, i)}>
+			<canvas id="map{i}" class="map" style={mapStyles[i]} />
+			<canvas id="view{i}" class="view" />
 		</div>
 	{/each}
 </div>
@@ -219,7 +258,7 @@
 		z-index: 1;
 	}
 
-	.player {
+	.view {
 		width: 100%;
 		height: 100%;
 		position: absolute;
