@@ -22,6 +22,7 @@
 	},
 	"type": "module",
 	"dependencies": {
-		"points-on-curve": "^1.0.0"
+		"points-on-curve": "^1.0.0",
+		"throttle-debounce": "^5.0.0"
 	}
 }

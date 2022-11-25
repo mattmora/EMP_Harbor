@@ -1,7 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
+	import { throttle } from 'throttle-debounce';
 	import { pointsOnBezierCurves } from 'points-on-curve';
 	import { curveToBezier } from 'points-on-curve/lib/curve-to-bezier.js';
+	import DefaultPaths from '../lib/path-data';
 
 	const maps = [];
 	const views = [];
@@ -15,8 +17,9 @@
 	let animationContext;
 
 	const input = {};
+	const toggle = {};
 	const zoomRate = 0.2;
-	const moveSpeed = 200;
+	const moveSpeed = 400;
 
 	const update = (delta) => {
 		views.forEach((view) => {
@@ -82,6 +85,7 @@
 
 	const onKeyDown = (e) => {
 		input[e.key.toLowerCase()] = 1;
+		toggle[e.key.toLowerCase()] = !toggle[e.key.toLowerCase()];
 	};
 
 	const onKeyUp = (e) => {
@@ -100,7 +104,7 @@
 
 	let hueRotate = 180;
 	let invert = 100;
-	let saturation = 1;
+	let saturation = 1.1;
 
 	const mapStyles = [];
 	for (let i = 0; i < viewCount; i++) {
@@ -134,14 +138,19 @@
 			maps[i].context = maps[i].canvas.getContext('2d');
 
 			ships.push({
-				points: [],
+				points: DefaultPaths[i],
 				path: [],
+				pathString: '',
+				editing: -1,
 				color: shipColors[i]
 			});
+			updateShipPath(i, true);
+			ships[i].x = ships[i].path[0] ? ships[i].path[0][0] : 0;
+			ships[i].y = ships[i].path[0] ? ships[i].path[0][1] : 0;
 
 			views.push({
-				x: 0,
-				y: 0,
+				x: ships[i].x,
+				y: ships[i].y,
 				zoom: 1,
 				map: maps[i],
 				ship: ships[i]
@@ -167,9 +176,13 @@
 
 			backgroundContext.drawImage(image, 0, 0);
 
-			maps.forEach(({ canvas: c, context: ctx }) => {
-				ctx.drawImage(backgroundCanvas, 0, 0, c.width, c.height, 0, 0, c.width, c.height);
+			maps.forEach(({ canvas, context }) => {
+				const width = canvas.width;
+				const height = canvas.height;
+				context.drawImage(backgroundCanvas, 0, 0, width, height, 0, 0, width, height);
 			});
+
+			renderShipPaths();
 		};
 
 		const hiRes = new Image();
@@ -185,42 +198,93 @@
 	});
 
 	const shipColors = ['#ff00d7', '#c9ff00', '#ff9900', '#0982ff'];
+	const pointRange = 20;
 
-	const updateShipPaths = () => {
+	const renderShipPaths = () => {
 		const canvas = animationCanvas;
 		const context = animationContext;
 		context.clearRect(0, 0, canvas.width, canvas.height);
-		ships.forEach(({ path, color }) => {
+		ships.forEach(({ points, path, color }) => {
 			if (path.length > 0) {
 				context.beginPath();
 				context.lineWidth = 3;
 				context.strokeStyle = color;
-				context.setLineDash([10, 2]);
-				context.moveTo(path[0][0], path[0][1]);
+				context.setLineDash([12, 3]);
+				let x = path[0][0];
+				let y = path[0][1];
+				context.moveTo(x, y);
 				for (let i = 1; i < path.length; i++) {
-					context.lineTo(path[i][0], path[i][1]);
+					x = path[i][0];
+					y = path[i][1];
+					context.lineTo(x, y);
 				}
 				context.stroke();
+
+				// Draw through points
+				for (let i = 0; i < points.length; i++) {
+					x = points[i][0];
+					y = points[i][1];
+					context.beginPath();
+					context.arc(x, y, pointRange, 0, 2 * Math.PI);
+					context.stroke();
+				}
 			}
 		});
 	};
 
-	const addPointToCurve = (e, i) => {
+	const updateShipPath = (i, updateString) => {
+		const ship = ships[i];
+		if (ship.points.length > 2) {
+			const bezier = curveToBezier(ship.points);
+			ship.path = pointsOnBezierCurves(bezier, 0.8, 1);
+		}
+		if (updateString) {
+			console.log('updated string');
+			ship.pathString = JSON.stringify(ship.points);
+		}
+	};
+
+	const editPath = (e, i) => {
+		const ship = ships[i];
+		const { x, y, zoom, canvas } = views[i];
+		const px = x + (e.offsetX - canvas.width * 0.5) / zoom;
+		const py = y + (e.offsetY - canvas.height * 0.5) / zoom;
+		// console.log(`${e.offsetX} ${e.offsetY}`);
+		// console.log(`${px} ${py}`);
+
+		if (e.button == 0) {
+			if (ship.editing >= 0) {
+				ship.points[ship.editing] = [px, py];
+				ship.editing = -1;
+			} else {
+				for (let p = 0; p < ship.points.length; p++) {
+					var xd = px - ship.points[p][0];
+					var yd = py - ship.points[p][1];
+					var d = Math.sqrt(xd * xd + yd * yd);
+					if (d < pointRange) {
+						ship.editing = p;
+					}
+				}
+				if (ship.editing < 0) {
+					ship.points.push([px, py]);
+				}
+			}
+			updateShipPath(i, true);
+			renderShipPaths();
+		}
+	};
+
+	const editingPath = (e, i) => {
+		const ship = ships[i];
 		const { x, y, zoom, canvas } = views[i];
 		const px = x + (e.offsetX - canvas.width * 0.5) / zoom;
 		const py = y + (e.offsetY - canvas.height * 0.5) / zoom;
 
-		console.log(`${e.offsetX} ${e.offsetY}`);
-		console.log(`${px} ${py}`);
-
-		const ship = ships[i];
-		ship.points.push([px, py]);
-		if (ship.points.length > 2) {
-			const bezier = curveToBezier(ship.points);
-			ship.path = pointsOnBezierCurves(bezier, 0.8);
+		if (ship.editing >= 0) {
+			ship.points[ship.editing] = [px, py];
+			updateShipPath(i);
+			renderShipPaths();
 		}
-
-		updateShipPaths();
 	};
 </script>
 
@@ -228,9 +292,18 @@
 
 <div class="views" style={gridStyle}>
 	{#each [...Array(viewCount).keys()] as _, i}
-		<div id="viewport{i}" class="viewport" on:mousedown={(e) => addPointToCurve(e, i)}>
-			<canvas id="map{i}" class="map" style={mapStyles[i]} />
-			<canvas id="view{i}" class="view" />
+		<div id="viewport{i}" class="viewport">
+			{#if toggle.p}
+				<pre>{ships[i].pathString}</pre>
+			{/if}
+			<canvas id="map{i}" class="map" style={mapStyles[i] + (toggle.p ? 'height: 90%;' : '')} />
+			<canvas
+				id="view{i}"
+				class="view"
+				style={toggle.p ? 'height: 90%;' : ''}
+				on:mousedown={(e) => editPath(e, i)}
+				on:mousemove={throttle(40, (e) => editingPath(e, i))}
+			/>
 		</div>
 	{/each}
 </div>
@@ -248,6 +321,17 @@
 		width: 100%;
 		height: 100%;
 		overflow: hidden;
+	}
+
+	pre {
+		background-color: white;
+		padding: 20px;
+		font-size: 20px;
+		width: 100%;
+		height: 10%;
+		position: absolute;
+		bottom: 0;
+		z-index: 3;
 	}
 
 	.map {
