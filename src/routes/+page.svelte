@@ -166,7 +166,7 @@
 
 		// On image load, set canvas sizes and render the background
 		const image = new Image();
-		image.src = 'chart-5000.png';
+		image.src = '/harbor/chart-5000.png';
 		image.onload = () => {
 			backgroundCanvas.width = image.naturalWidth;
 			backgroundCanvas.height = image.naturalHeight;
@@ -186,7 +186,7 @@
 		};
 
 		const hiRes = new Image();
-		hiRes.src = 'chart-10000.png';
+		hiRes.src = '/harbor/chart-10000.png';
 		hiRes.onload = () => {
 			hiResCanvas.width = hiRes.naturalWidth;
 			hiResCanvas.height = hiRes.naturalHeight;
@@ -239,7 +239,6 @@
 			ship.path = pointsOnBezierCurves(bezier, 0.8, 1);
 		}
 		if (updateString) {
-			console.log('updated string');
 			ship.pathString = JSON.stringify(ship.points);
 		}
 	};
