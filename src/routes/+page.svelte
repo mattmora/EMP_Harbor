@@ -175,7 +175,7 @@
 
 	let hueRotate = 180;
 	let invert = 100;
-	let saturation = 1.1;
+	let saturation = 1;
 
 	const mapStyles = [];
 	for (let i = 0; i < viewCount; i++) {
@@ -239,9 +239,12 @@
 			views[i].canvas = document.getElementById(`view${i}`);
 			views[i].context = views[i].canvas.getContext('2d');
 
-			views.forEach(({ canvas, map }) => {
+			views.forEach((view) => {
+				const { canvas, map } = view;
 				map.canvas.width = canvas.width = canvas.offsetWidth;
 				map.canvas.height = canvas.height = canvas.offsetHeight;
+				view.x = canvas.width * 0.5;
+				view.y = canvas.height * 0.5;
 			});
 		}
 
@@ -281,7 +284,7 @@
 		requestAnimationFrame(step);
 	});
 
-	const shipColors = ['#ff00d7', '#c9ff00', '#ff9900', '#0982ff'];
+	const shipColors = ['#ff00d7', '#ff9900', '#c9ff00', '#0982ff'];
 	const pointRange = 20;
 
 	const renderShipPaths = () => {
