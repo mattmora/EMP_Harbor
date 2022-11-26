@@ -173,21 +173,23 @@
 	grid-template-columns: ${sizeString.repeat(div)};
 	grid-template-rows: ${sizeString.repeat(div)};`;
 
-	let hueRotate = 240;
+	let hueRotate = 180;
 	let invert = 100;
 	let saturation = 1.1;
 
 	const mapStyles = [];
 	for (let i = 0; i < viewCount; i++) {
 		mapStyles.push(
-			`filter: hue-rotate(${hueRotate}deg) invert(${invert}%) saturate(${saturation});`
+			`filter: hue-rotate(${
+				hueRotate + i * (360 / viewCount)
+			}deg) invert(${invert}%) saturate(${saturation});`
 		);
 	}
 	$: {
 		for (let i = 0; i < viewCount; i++) {
-			mapStyles[
-				i
-			] = `filter: hue-rotate(${hueRotate}deg) invert(${invert}%) saturate(${saturation});`;
+			mapStyles[i] = `filter: hue-rotate(${
+				hueRotate + i * (360 / viewCount)
+			}deg) invert(${invert}%) saturate(${saturation});`;
 		}
 	}
 
