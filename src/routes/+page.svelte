@@ -230,7 +230,7 @@
 			views.push({
 				x: ships[i].x,
 				y: ships[i].y,
-				zoom: 4,
+				zoom: 1,
 				map: maps[i],
 				ship: ships[i]
 			});
