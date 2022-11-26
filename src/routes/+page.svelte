@@ -4,6 +4,7 @@
 	import { pointsOnBezierCurves } from 'points-on-curve';
 	import { curveToBezier } from 'points-on-curve/lib/curve-to-bezier.js';
 	import DefaultPaths from '../lib/path-data';
+	import { dist } from '../lib/utilities';
 
 	const maps = [];
 	const views = [];
@@ -13,16 +14,26 @@
 	let hiResContext;
 	let backgroundCanvas;
 	let backgroundContext;
-	let animationCanvas;
-	let animationContext;
+	let pathCanvas;
+	let pathContext;
+	let shipCanvas;
+	let shipContext;
 
 	const input = {};
 	const toggle = {};
 	const zoomRate = 0.2;
 	const moveSpeed = 400;
+	const voyageDuration = 10;
+	const alpha = 0.7;
+
+	let focus = -1;
 
 	const update = (delta) => {
-		views.forEach((view) => {
+		for (let i = 0; i < views.length; i++) {
+			if (focus >= 0 && i != focus) continue;
+
+			const view = views[i];
+			const ship = ships[i];
 			let { x, y, zoom } = view;
 
 			const forward = input.e ?? 0;
@@ -31,31 +42,87 @@
 			const zn = Math.pow(1 + z * zoomRate, delta);
 			zoom *= zn;
 
-			const left = input.a ?? 0;
-			const right = input.d ?? 0;
-			const down = input.s ?? 0;
-			const up = input.w ?? 0;
-			const h = right - left;
-			const v = up - down;
-			const mag = Math.sqrt(h * h + v * v);
-			const n = mag > 0 ? 1 / mag : 0;
-			x += n * h * moveSpeed * delta; //* (1 / zoom) ;
-			y -= n * v * moveSpeed * delta; //* (1 / zoom) ;
+			if (input.r) {
+				ship.pathIndex = 0;
+				ship.x = ship.path[0][0];
+				ship.y = ship.path[0][1];
+			}
+
+			if (toggle.v && ship.pathIndex < ship.path.length - 1) {
+				const speed = ship.pathLength / voyageDuration;
+				let d = speed * delta;
+				while (d > 0 && ship.pathIndex < ship.path.length - 1) {
+					let p = ship.pathIndex;
+					let nx = ship.path[p + 1][0];
+					let ny = ship.path[p + 1][1];
+					const dn = dist(ship.x, nx, ship.y, ny);
+					if (dn > 0) ship.course = Math.atan2(ny - ship.y, nx - ship.x);
+					if (dn == 0) {
+						ship.pathIndex++;
+						continue;
+					}
+					const move = Math.min(d, dn);
+					const fx = Math.cos(ship.course);
+					const fy = Math.sin(ship.course);
+					ship.x += fx * move;
+					ship.y += fy * move;
+					d -= move;
+				}
+			}
+
+			if (toggle.f) {
+				const a = alpha * delta;
+				x = ship.x * a + x * (1 - a);
+				y = ship.y * a + y * (1 - a);
+			} else {
+				const left = input.a ?? 0;
+				const right = input.d ?? 0;
+				const down = input.s ?? 0;
+				const up = input.w ?? 0;
+				const h = right - left;
+				const v = up - down;
+				const mag = Math.sqrt(h * h + v * v);
+				const n = mag > 0 ? 1 / mag : 0;
+				x += n * h * moveSpeed * delta; //* (1 / zoom) ;
+				y -= n * v * moveSpeed * delta; //* (1 / zoom) ;
+			}
 
 			view.x = x;
 			view.y = y;
 			view.zoom = zoom;
+		}
 
-			hueRotate += delta;
-		});
+		// hueRotate += delta;
+		input.r = false;
 	};
 
 	const render = () => {
 		const hiResRatio = hiResCanvas.width / backgroundCanvas.width;
 
+		shipContext.clearRect(0, 0, shipCanvas.width, shipCanvas.height);
+
+		ships.forEach((ship) => {
+			shipContext.beginPath();
+			shipContext.fillStyle = ship.color;
+			const fx = ship.x + Math.cos(ship.course) * 20;
+			const fy = ship.y + Math.sin(ship.course) * 20;
+			const rx = ship.x + Math.cos(ship.course + Math.PI / 1.5) * 20;
+			const ry = ship.y + Math.sin(ship.course + Math.PI / 1.5) * 20;
+			const lx = ship.x + Math.cos(ship.course - Math.PI / 1.5) * 20;
+			const ly = ship.y + Math.sin(ship.course - Math.PI / 1.5) * 20;
+			// console.log(`${fx} ${fy} ${rx} ${ry} ${lx} ${ly}`)
+			shipContext.moveTo(fx, fy);
+			shipContext.lineTo(rx, ry);
+			shipContext.lineTo(ship.x, ship.y);
+			shipContext.lineTo(lx, ly);
+			shipContext.fill();
+		});
+
 		views.forEach(({ x, y, zoom, canvas, context, map }) => {
 			const width = (map.canvas.width = canvas.width = canvas.offsetWidth);
 			const height = (map.canvas.height = canvas.height = canvas.offsetHeight);
+
+			zoom *= focus >= 0 ? Math.ceil(Math.sqrt(viewCount)) : 1;
 
 			const useHiRes = zoom > 0.8;
 			const sourceCanvas = useHiRes ? hiResCanvas : backgroundCanvas;
@@ -66,7 +133,8 @@
 			const left = x - w * 0.5;
 			const top = y - h * 0.5;
 
-			context.drawImage(animationCanvas, left, top, w, h, 0, 0, width, height);
+			if (showPaths) context.drawImage(pathCanvas, left, top, w, h, 0, 0, width, height);
+			context.drawImage(shipCanvas, left, top, w, h, 0, 0, width, height);
 			map.context.drawImage(sourceCanvas, left * s, top * s, w * s, h * s, 0, 0, width, height);
 		});
 	};
@@ -86,6 +154,9 @@
 	const onKeyDown = (e) => {
 		input[e.key.toLowerCase()] = 1;
 		toggle[e.key.toLowerCase()] = !toggle[e.key.toLowerCase()];
+		let intKey = parseInt(e.key) - 1;
+		if (intKey == focus || intKey >= viewCount) focus = -1;
+		else focus = isNaN(intKey) ? focus : intKey;
 	};
 
 	const onKeyUp = (e) => {
@@ -93,16 +164,16 @@
 	};
 
 	const viewCount = 4;
-	const div = Math.ceil(Math.sqrt(viewCount));
+	$: div = focus >= 0 ? 1 : Math.ceil(Math.sqrt(viewCount));
 
-	const cellSize = 100 / div;
-	const sizeString = `${cellSize}% `;
+	$: cellSize = 100 / div;
+	$: sizeString = `${cellSize}% `;
 
 	$: gridStyle = `
 	grid-template-columns: ${sizeString.repeat(div)};
 	grid-template-rows: ${sizeString.repeat(div)};`;
 
-	let hueRotate = 180;
+	let hueRotate = 240;
 	let invert = 100;
 	let saturation = 1.1;
 
@@ -128,8 +199,11 @@
 		backgroundCanvas = document.createElement('canvas');
 		backgroundContext = backgroundCanvas.getContext('2d');
 
-		animationCanvas = document.createElement('canvas');
-		animationContext = animationCanvas.getContext('2d');
+		pathCanvas = document.createElement('canvas');
+		pathContext = pathCanvas.getContext('2d');
+
+		shipCanvas = document.createElement('canvas');
+		shipContext = shipCanvas.getContext('2d');
 
 		// Rendering canvases
 		for (let i = 0; i < viewCount; i++) {
@@ -140,6 +214,8 @@
 			ships.push({
 				points: DefaultPaths[i],
 				path: [],
+				pathIndex: 0,
+				pathLength: 0,
 				pathString: '',
 				editing: -1,
 				color: shipColors[i]
@@ -147,11 +223,14 @@
 			updateShipPath(i, true);
 			ships[i].x = ships[i].path[0] ? ships[i].path[0][0] : 0;
 			ships[i].y = ships[i].path[0] ? ships[i].path[0][1] : 0;
+			const nx = ships[i].path[1] ? ships[i].path[1][0] : ships[i].x;
+			const ny = ships[i].path[1] ? ships[i].path[1][1] : ships[i].y;
+			ships[i].course = Math.atan2(ny - ships[i].y, nx - ships[i].x);
 
 			views.push({
 				x: ships[i].x,
 				y: ships[i].y,
-				zoom: 1,
+				zoom: 4,
 				map: maps[i],
 				ship: ships[i]
 			});
@@ -171,8 +250,11 @@
 			backgroundCanvas.width = image.naturalWidth;
 			backgroundCanvas.height = image.naturalHeight;
 
-			animationCanvas.width = image.naturalWidth;
-			animationCanvas.height = image.naturalHeight;
+			pathCanvas.width = image.naturalWidth;
+			pathCanvas.height = image.naturalHeight;
+
+			shipCanvas.width = image.naturalWidth;
+			shipCanvas.height = image.naturalHeight;
 
 			backgroundContext.drawImage(image, 0, 0);
 
@@ -201,8 +283,8 @@
 	const pointRange = 20;
 
 	const renderShipPaths = () => {
-		const canvas = animationCanvas;
-		const context = animationContext;
+		const canvas = pathCanvas;
+		const context = pathContext;
 		context.clearRect(0, 0, canvas.width, canvas.height);
 		ships.forEach(({ points, path, color }) => {
 			if (path.length > 0) {
@@ -234,9 +316,20 @@
 
 	const updateShipPath = (i, updateString) => {
 		const ship = ships[i];
-		if (ship.points.length > 2) {
+		if (ship.points.length > 3) {
 			const bezier = curveToBezier(ship.points);
 			ship.path = pointsOnBezierCurves(bezier, 0.8, 1);
+		} else {
+			ship.path = ship.points;
+		}
+		ship.pathLength = 0;
+		for (let p = 1; p < ship.path.length; p++) {
+			ship.pathLength += dist(
+				ship.path[p - 1][0],
+				ship.path[p][0],
+				ship.path[p - 1][1],
+				ship.path[p][1]
+			);
 		}
 		if (updateString) {
 			ship.pathString = JSON.stringify(ship.points);
@@ -244,6 +337,7 @@
 	};
 
 	const editPath = (e, i) => {
+		if (!showPaths) return;
 		const ship = ships[i];
 		const { x, y, zoom, canvas } = views[i];
 		const px = x + (e.offsetX - canvas.width * 0.5) / zoom;
@@ -253,13 +347,23 @@
 
 		if (e.button == 0) {
 			if (ship.editing >= 0) {
-				ship.points[ship.editing] = [px, py];
+				let selectedAdjacent = -1;
+				for (let p = 0; p < ship.points.length; p++) {
+					if (Math.abs(p - ship.editing) != 1) continue;
+					var d = dist(ship.points[p][0], px, ship.points[p][1], py);
+					if (d < pointRange) {
+						selectedAdjacent = p;
+					}
+				}
+				if (selectedAdjacent < 0) {
+					ship.points[ship.editing] = [px, py];
+				} else {
+					ship.points.splice(ship.editing, 1);
+				}
 				ship.editing = -1;
 			} else {
 				for (let p = 0; p < ship.points.length; p++) {
-					var xd = px - ship.points[p][0];
-					var yd = py - ship.points[p][1];
-					var d = Math.sqrt(xd * xd + yd * yd);
+					var d = dist(ship.points[p][0], px, ship.points[p][1], py);
 					if (d < pointRange) {
 						ship.editing = p;
 					}
@@ -274,6 +378,7 @@
 	};
 
 	const editingPath = (e, i) => {
+		if (!showPaths) return;
 		const ship = ships[i];
 		const { x, y, zoom, canvas } = views[i];
 		const px = x + (e.offsetX - canvas.width * 0.5) / zoom;
@@ -285,21 +390,24 @@
 			renderShipPaths();
 		}
 	};
+
+	$: showData = toggle.c;
+	$: showPaths = !toggle.p;
 </script>
 
 <svelte:window on:keydown|preventDefault={onKeyDown} on:keyup|preventDefault={onKeyUp} />
 
 <div class="views" style={gridStyle}>
 	{#each [...Array(viewCount).keys()] as _, i}
-		<div id="viewport{i}" class="viewport">
-			{#if toggle.p}
+		<div id="viewport{i}" class="viewport" style={focus < 0 || focus == i ? '' : 'display: none'}>
+			{#if showData}
 				<pre>{ships[i].pathString}</pre>
 			{/if}
-			<canvas id="map{i}" class="map" style={mapStyles[i] + (toggle.p ? 'height: 90%;' : '')} />
+			<canvas id="map{i}" class="map" style={mapStyles[i] + (showData ? 'height: 95%;' : '')} />
 			<canvas
 				id="view{i}"
 				class="view"
-				style={toggle.p ? 'height: 90%;' : ''}
+				style={showData ? 'height: 95%;' : ''}
 				on:mousedown={(e) => editPath(e, i)}
 				on:mousemove={throttle(40, (e) => editingPath(e, i))}
 			/>
@@ -327,7 +435,7 @@
 		padding: 20px;
 		font-size: 20px;
 		width: 100%;
-		height: 10%;
+		height: 5%;
 		position: absolute;
 		bottom: 0;
 		z-index: 3;
