@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { throttle } from 'throttle-debounce';
 	import { pointsOnBezierCurves } from 'points-on-curve';
 	import { curveToBezier } from 'points-on-curve/lib/curve-to-bezier.js';
@@ -24,7 +24,7 @@
 	const zoomRate = 0.2;
 	const moveSpeed = 400;
 	const voyageDuration = 10;
-	const alpha = 0.7;
+	let alpha = 0.03;
 
 	let focus = -1;
 
@@ -71,7 +71,7 @@
 			}
 
 			if (toggle.f) {
-				const a = alpha * delta;
+				const a = alpha;
 				x = ship.x * a + x * (1 - a);
 				y = ship.y * a + y * (1 - a);
 			} else {
@@ -140,7 +140,7 @@
 	};
 
 	let start, previous;
-	const step = (timestamp) => {
+	const step = throttle(0, (timestamp) => {
 		if (!start) start = timestamp;
 		const delta = timestamp - previous;
 		if (delta > 0) {
@@ -149,7 +149,7 @@
 		}
 		previous = timestamp;
 		requestAnimationFrame(step);
-	};
+	});
 
 	const onKeyDown = (e) => {
 		input[e.key.toLowerCase()] = 1;
@@ -157,13 +157,15 @@
 		let intKey = parseInt(e.key) - 1;
 		if (intKey == focus || intKey >= viewCount) focus = -1;
 		else focus = isNaN(intKey) ? focus : intKey;
+		renderShipPaths();
 	};
 
 	const onKeyUp = (e) => {
 		input[e.key.toLowerCase()] = 0;
 	};
 
-	const viewCount = 4;
+	let viewCount = 4;
+	$: viewCountArray = [...Array(viewCount).keys()];
 	$: div = focus >= 0 ? 1 : Math.ceil(Math.sqrt(viewCount));
 
 	$: cellSize = 100 / div;
@@ -177,23 +179,29 @@
 	let invert = 100;
 	let saturation = 1;
 
-	const mapStyles = [];
-	for (let i = 0; i < viewCount; i++) {
-		mapStyles.push(
-			`filter: hue-rotate(${
-				hueRotate + i * (360 / viewCount)
-			}deg) invert(${invert}%) saturate(${saturation});`
-		);
-	}
+	let mapStyles;
 	$: {
+		mapStyles = [];
 		for (let i = 0; i < viewCount; i++) {
-			mapStyles[i] = `filter: hue-rotate(${
-				hueRotate + i * (360 / viewCount)
-			}deg) invert(${invert}%) saturate(${saturation});`;
+			mapStyles.push(
+				`filter: hue-rotate(${
+					hueRotate + i * (360 / viewCount) * 1
+				}deg) invert(${invert}%) saturate(${saturation});`
+			);
 		}
 	}
 
-	onMount(() => {
+	onMount(async () => {
+		const searchParams = {
+			views: parseInt(new URLSearchParams(window.location.search).get('views')),
+			follow: parseFloat(new URLSearchParams(window.location.search).get('follow'))
+		};
+		viewCount = isNaN(searchParams.views) ? viewCount : searchParams.views;
+		viewCountArray = [...Array(viewCount).keys()];
+		alpha = isNaN(searchParams.follow) ? alpha : searchParams.follow;
+
+		await tick();
+
 		// Offscreen canvases
 		hiResCanvas = document.createElement('canvas');
 		hiResContext = hiResCanvas.getContext('2d');
@@ -214,17 +222,17 @@
 			maps[i].context = maps[i].canvas.getContext('2d');
 
 			ships.push({
-				points: DefaultPaths[i],
+				points: DefaultPaths[i % DefaultPaths.length],
 				path: [],
 				pathIndex: 0,
 				pathLength: 0,
 				pathString: '',
 				editing: -1,
-				color: shipColors[i]
+				color: shipColors[i % shipColors.length]
 			});
 			updateShipPath(i, true);
-			ships[i].x = ships[i].path[0] ? ships[i].path[0][0] : 0;
-			ships[i].y = ships[i].path[0] ? ships[i].path[0][1] : 0;
+			ships[i].x = ships[i].path[0] ? ships[i].path[0][0] : -1;
+			ships[i].y = ships[i].path[0] ? ships[i].path[0][1] : -1;
 			const nx = ships[i].path[1] ? ships[i].path[1][0] : ships[i].x;
 			const ny = ships[i].path[1] ? ships[i].path[1][1] : ships[i].y;
 			ships[i].course = Math.atan2(ny - ships[i].y, nx - ships[i].x);
@@ -232,19 +240,19 @@
 			views.push({
 				x: ships[i].x,
 				y: ships[i].y,
-				zoom: 1,
 				map: maps[i],
 				ship: ships[i]
 			});
 			views[i].canvas = document.getElementById(`view${i}`);
 			views[i].context = views[i].canvas.getContext('2d');
+			views[i].zoom = (2 * shipCanvas.width) / views[i].canvas.width;
 
 			views.forEach((view) => {
-				const { canvas, map } = view;
+				const { canvas, map, zoom } = view;
 				map.canvas.width = canvas.width = canvas.offsetWidth;
 				map.canvas.height = canvas.height = canvas.offsetHeight;
-				view.x = canvas.width * 0.5;
-				view.y = canvas.height * 0.5;
+				view.x = view.x < 0 ? (canvas.width / zoom) * 0.5 : view.x;
+				view.y = view.y < 0 ? (canvas.height / zoom) * 0.5 : view.y;
 			});
 		}
 
@@ -312,7 +320,9 @@
 					x = points[i][0];
 					y = points[i][1];
 					context.beginPath();
-					context.arc(x, y, pointRange, 0, 2 * Math.PI);
+					if (!toggle.o || i == 0 || i == points.length - 1) {
+						context.arc(x, y, pointRange, 0, 2 * Math.PI);
+					}
 					context.stroke();
 				}
 			}
@@ -402,10 +412,10 @@
 	$: showPaths = !toggle.p;
 </script>
 
-<svelte:window on:keydown|preventDefault={onKeyDown} on:keyup|preventDefault={onKeyUp} />
+<svelte:window on:keydown={onKeyDown} on:keyup={onKeyUp} />
 
 <div class="views" style={gridStyle}>
-	{#each [...Array(viewCount).keys()] as _, i}
+	{#each viewCountArray as _, i}
 		<div id="viewport{i}" class="viewport" style={focus < 0 || focus == i ? '' : 'display: none'}>
 			{#if showData}
 				<pre>{ships[i].pathString}</pre>
@@ -428,6 +438,7 @@
 		width: 100%;
 		height: 100%;
 		display: grid;
+		cursor: crosshair;
 	}
 
 	.viewport {
