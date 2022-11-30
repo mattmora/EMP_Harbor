@@ -245,7 +245,7 @@
 			});
 			views[i].canvas = document.getElementById(`view${i}`);
 			views[i].context = views[i].canvas.getContext('2d');
-			views[i].zoom = (2 * shipCanvas.width) / views[i].canvas.width;
+			views[i].zoom = shipCanvas.width / views[i].canvas.width;
 
 			views.forEach((view) => {
 				const { canvas, map, zoom } = view;
