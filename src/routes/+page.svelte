@@ -344,7 +344,8 @@
 	const editPath = (e, i) => {
 		if (!showPaths) return;
 		const ship = ships[i];
-		const { x, y, zoom, canvas } = views[i];
+		let { x, y, zoom, canvas } = views[i];
+		zoom *= focus >= 0 ? Math.ceil(Math.sqrt(viewCount)) : 1;
 		const px = x + (e.offsetX - canvas.width * 0.5) / zoom;
 		const py = y + (e.offsetY - canvas.height * 0.5) / zoom;
 		// console.log(`${e.offsetX} ${e.offsetY}`);
@@ -385,7 +386,8 @@
 	const editingPath = (e, i) => {
 		if (!showPaths) return;
 		const ship = ships[i];
-		const { x, y, zoom, canvas } = views[i];
+		let { x, y, zoom, canvas } = views[i];
+		zoom *= focus >= 0 ? Math.ceil(Math.sqrt(viewCount)) : 1;
 		const px = x + (e.offsetX - canvas.width * 0.5) / zoom;
 		const py = y + (e.offsetY - canvas.height * 0.5) / zoom;
 
