@@ -292,7 +292,7 @@
 		requestAnimationFrame(step);
 	});
 
-	const shipColors = ['#ff00d7', '#ff9900', '#c9ff00', '#0982ff'];
+	const shipColors = ['#ff00dd', '#ff9900', '#11ff00', '#1188ff'];
 	const pointRange = 20;
 
 	const renderShipPaths = () => {
