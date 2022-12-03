@@ -23,7 +23,7 @@
 	const toggle = {};
 	const zoomRate = 0.2;
 	const moveSpeed = 400;
-	const voyageDuration = 10;
+	let voyageDuration = 10;
 	let alpha = 0.03;
 
 	let focus = -1;
@@ -194,11 +194,13 @@
 	onMount(async () => {
 		const searchParams = {
 			views: parseInt(new URLSearchParams(window.location.search).get('views')),
-			follow: parseFloat(new URLSearchParams(window.location.search).get('follow'))
+			follow: parseFloat(new URLSearchParams(window.location.search).get('follow')),
+			duration: parseFloat(new URLSearchParams(window.location.search).get('duration'))
 		};
 		viewCount = isNaN(searchParams.views) ? viewCount : searchParams.views;
 		viewCountArray = [...Array(viewCount).keys()];
 		alpha = isNaN(searchParams.follow) ? alpha : searchParams.follow;
+		voyageDuration = isNaN(searchParams.duration) ? voyageDuration : searchParams.duration;
 
 		await tick();
 
