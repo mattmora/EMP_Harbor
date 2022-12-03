@@ -26,11 +26,13 @@
 	let voyageDuration = 10;
 	let alpha = 0.03;
 
+	let shape = 'arrow';
+
 	let focus = -1;
 
 	const update = (delta) => {
 		for (let i = 0; i < views.length; i++) {
-			if (focus >= 0 && i != focus) continue;
+			// if (focus >= 0 && i != focus) continue;
 
 			const view = views[i];
 			const ship = ships[i];
@@ -74,7 +76,7 @@
 				const a = alpha;
 				x = ship.x * a + x * (1 - a);
 				y = ship.y * a + y * (1 - a);
-			} else {
+			} else if (focus >= 0 && i == focus) {
 				const left = input.a ?? 0;
 				const right = input.d ?? 0;
 				const down = input.s ?? 0;
@@ -104,17 +106,21 @@
 		ships.forEach((ship) => {
 			shipContext.beginPath();
 			shipContext.fillStyle = ship.color;
-			const fx = ship.x + Math.cos(ship.course) * 20;
-			const fy = ship.y + Math.sin(ship.course) * 20;
-			const rx = ship.x + Math.cos(ship.course + Math.PI / 1.5) * 20;
-			const ry = ship.y + Math.sin(ship.course + Math.PI / 1.5) * 20;
-			const lx = ship.x + Math.cos(ship.course - Math.PI / 1.5) * 20;
-			const ly = ship.y + Math.sin(ship.course - Math.PI / 1.5) * 20;
-			// console.log(`${fx} ${fy} ${rx} ${ry} ${lx} ${ly}`)
-			shipContext.moveTo(fx, fy);
-			shipContext.lineTo(rx, ry);
-			shipContext.lineTo(ship.x, ship.y);
-			shipContext.lineTo(lx, ly);
+			if (shape === 'arrow') {
+				const fx = ship.x + Math.cos(ship.course) * 20;
+				const fy = ship.y + Math.sin(ship.course) * 20;
+				const rx = ship.x + Math.cos(ship.course + Math.PI / 1.5) * 20;
+				const ry = ship.y + Math.sin(ship.course + Math.PI / 1.5) * 20;
+				const lx = ship.x + Math.cos(ship.course - Math.PI / 1.5) * 20;
+				const ly = ship.y + Math.sin(ship.course - Math.PI / 1.5) * 20;
+				// console.log(`${fx} ${fy} ${rx} ${ry} ${lx} ${ly}`)
+				shipContext.moveTo(fx, fy);
+				shipContext.lineTo(rx, ry);
+				shipContext.lineTo(ship.x, ship.y);
+				shipContext.lineTo(lx, ly);
+			} else {
+				shipContext.arc(ship.x, ship.y, 8, 0, 2 * Math.PI);
+			}
 			shipContext.fill();
 		});
 
@@ -195,12 +201,14 @@
 		const searchParams = {
 			views: parseInt(new URLSearchParams(window.location.search).get('views')),
 			follow: parseFloat(new URLSearchParams(window.location.search).get('follow')),
-			duration: parseFloat(new URLSearchParams(window.location.search).get('duration'))
+			duration: parseFloat(new URLSearchParams(window.location.search).get('duration')),
+			shape: new URLSearchParams(window.location.search).get('shape')
 		};
 		viewCount = isNaN(searchParams.views) ? viewCount : searchParams.views;
 		viewCountArray = [...Array(viewCount).keys()];
 		alpha = isNaN(searchParams.follow) ? alpha : searchParams.follow;
 		voyageDuration = isNaN(searchParams.duration) ? voyageDuration : searchParams.duration;
+		shape = searchParams.shape ?? shape;
 
 		await tick();
 
