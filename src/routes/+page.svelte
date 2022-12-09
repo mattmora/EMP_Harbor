@@ -76,7 +76,7 @@
 				const a = alpha;
 				x = ship.x * a + x * (1 - a);
 				y = ship.y * a + y * (1 - a);
-			} else if (focus >= 0 && i == focus) {
+			} else if (focus < 0 || i == focus) {
 				const left = input.a ?? 0;
 				const right = input.d ?? 0;
 				const down = input.s ?? 0;
@@ -170,7 +170,7 @@
 		input[e.key.toLowerCase()] = 0;
 	};
 
-	let viewCount = 4;
+	let viewCount = 1;
 	$: viewCountArray = [...Array(viewCount).keys()];
 	$: div = focus >= 0 ? 1 : Math.ceil(Math.sqrt(viewCount));
 
@@ -232,7 +232,7 @@
 			maps[i].context = maps[i].canvas.getContext('2d');
 
 			ships.push({
-				points: DefaultPaths[i % DefaultPaths.length],
+				points: DefaultPaths[i % DefaultPaths.length] ?? [],
 				path: [],
 				pathIndex: 0,
 				pathLength: 0,
