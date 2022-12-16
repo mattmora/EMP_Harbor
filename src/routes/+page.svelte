@@ -23,10 +23,10 @@
 	const toggle = {};
 	const zoomRate = 0.2;
 	const moveSpeed = 400;
-	let voyageDuration = 10;
+	let voyageDuration = 420;
 	let alpha = 0.03;
 
-	let shape = 'arrow';
+	let shape = 'dot';//'arrow';
 
 	let focus = -1;
 
